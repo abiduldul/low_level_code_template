@@ -1,0 +1,60 @@
+{
+    "version": 4,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 21,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name":"linux",
+            "displayName":"Linux Simulation",
+            "description":"Datalogger on Linux",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/linux_sim",
+            "toolchainFile": "${sourceDir}/targets/linux/cmake/toolchain-linux.cmake",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILED_COMMANDS": "ON"
+            }
+        },
+        {
+            "name":"mertani-2.5",
+            "displayName":"Mertani Board 2.5",
+            "description":"Datalogger Mertani Board 2.5",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/mertani-2.5",
+            "toolchainFile": "${sourceDir}/targets/mertani-2.5/cmake/toolchain-mertani_2.5.cmake",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILED_COMMANDS": "ON"
+            }
+        },
+        {
+            "name":"mertani-2.5_HAL",
+            "displayName":"Mertani Board 2.5_HAL",
+            "description":"Datalogger Mertani Board 2.5 HAL",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/mertani-2.5_HAL",
+            "toolchainFile": "${sourceDir}/targets/mertani-2.5_HAL/cmake/toolchain-mertani_2.5_HAL.cmake",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILED_COMMANDS": "ON"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name":"build-linux",
+            "displayName":"Build For Linux Simulation",
+            "configurePreset":"linux"
+        },
+        {
+            "name":"build-mertani-2.5",
+            "displayName": "Build For Mertani Board 2.5",
+            "configurePreset": "mertani-2.5"
+        },
+        {
+            "name":"build-mertani-2.5_HAL",
+            "displayName": "Build For Mertani Board 2.5 HAL",
+            "configurePreset": "mertani-2.5_HAL"
+        }
+    ]
+}

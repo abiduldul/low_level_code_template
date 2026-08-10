@@ -1,0 +1,28 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 21,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name":"mertani-2.5",
+            "displayName":"Mertani Board 2.5",
+            "description":"Datalogger Mertani Board 2.5",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/mertani-2.5",
+            "toolchainFile": "${sourceDir}/cmake/toolchain-mertani_2.5.cmake",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILED_COMMANDS": "ON"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name":"build-mertani-2.5",
+            "displayName": "Build For Mertani Board 2.5",
+            "configurePreset": "mertani-2.5"
+        }
+    ]
+}

@@ -1,0 +1,22 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "STM32 Bare-Metal Debug",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build/mertani-2.5/firmware.elf",
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "gdbPath": "gdb-multiarch",
+            "configFiles": [
+                "interface/stlink.cfg",
+                "target/stm32l4x.cfg" 
+            ],
+            "runToEntryPoint": "main",
+            "showDevDebugOutput": "none",
+            "svdFile": "${workspaceFolder}/STM32L4P5.svd",
+            "preLaunchTask": "Build Project"
+        }
+    ]
+}
