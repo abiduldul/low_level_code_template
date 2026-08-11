@@ -20,14 +20,12 @@
 #include "stm32l4xx_hal.h"
 
 #include <stdint.h>
-#include <string.h>
 
 /* ------------------------------------------------------------------------- */
 /* Configuration                                                             */
 /* ------------------------------------------------------------------------- */
 
 #define USART3_RX_BUFFER_SIZE   512U    /* circular DMA landing buffer */
-#define ESP32_RX_BUFFER_SIZE    2048U   /* assembled frame buffer      */
 
 #define USART3_BAUDRATE         115200U
 #define USART3_TX_TIMEOUT_MS    1000U
@@ -41,15 +39,13 @@ static DMA_HandleTypeDef  hdma_usart3_rx;
 
 static uint8_t  usart3_rx_buffer[USART3_RX_BUFFER_SIZE];
 
-static uint8_t  esp32_rx_buffer[ESP32_RX_BUFFER_SIZE];
-static uint16_t esp32_rx_length;
 static uint16_t esp32_rx_old_pos;
-static uint8_t  esp32_rx_overflow;
 
 static void (*p_rx_cb)(const uint8_t *buf, uint16_t length);
 
 static void esp32_collect(uint16_t curr_pos);
 static void usart3_restart_rx(void);
+ static void esp32_feed(const uint8_t *data, uint16_t length);
 
 /* ------------------------------------------------------------------------- */
 /* MSP - clocks, GPIO, DMA, NVIC                                             */
@@ -183,23 +179,14 @@ void USART3_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
     if (huart->Instance != USART3) {
         return;
     }
-
+ 
+    /* Setiap event - half transfer, transfer complete, dan idle line -
+     * artinya sama saja: "DMA sudah menulis sampai posisi ini". Kuras dan
+     * teruskan. Tidak perlu menunggu IDLE untuk menandai akhir frame,
+     * karena lwesp_input_process() adalah konsumen byte-stream. */
     esp32_collect(Size);
-
-    /* Only an idle line ends a frame; HT/TC events just drain the circular
-     * buffer into esp32_rx_buffer. */
-    if (HAL_UARTEx_GetRxEventType(huart) != HAL_UART_RXEVENT_IDLE) {
-        return;
-    }
-
-    if (esp32_rx_length > 0U) {
-        if (!esp32_rx_overflow && (p_rx_cb != NULL)) {
-            p_rx_cb(esp32_rx_buffer, esp32_rx_length);
-        }
-        esp32_rx_length   = 0U;
-        esp32_rx_overflow = 0U;
-    }
 }
+
 
 void USART3_ErrorCallback(UART_HandleTypeDef *huart)
 {
@@ -221,52 +208,36 @@ void USART3_ErrorCallback(UART_HandleTypeDef *huart)
 static void usart3_restart_rx(void)
 {
     esp32_rx_old_pos  = 0U;
-    esp32_rx_length   = 0U;
-    esp32_rx_overflow = 0U;
 
     (void)HAL_UARTEx_ReceiveToIdle_DMA(&huart3, usart3_rx_buffer,
                                        USART3_RX_BUFFER_SIZE);
 }
 
-/* Copy everything the DMA wrote since the previous event, handling the wrap.
- * Same algorithm as ESP32_UART_DMA_Rx(), but the position comes from HAL
- * instead of being read out of CNDTR. */
+static void esp32_feed(const uint8_t *data, uint16_t length)
+{
+    if ((length > 0U) && (p_rx_cb != NULL)) {
+        p_rx_cb(data, length);
+    }
+}
+
 static void esp32_collect(uint16_t curr_pos)
 {
     if (curr_pos == esp32_rx_old_pos) {
         return;
     }
-
+ 
     if (curr_pos > esp32_rx_old_pos) {
         /* Linear: [ --- R DDDD W --- ] */
-        uint16_t length = curr_pos - esp32_rx_old_pos;
-
-        if ((esp32_rx_length + length) <= ESP32_RX_BUFFER_SIZE) {
-            memcpy(&esp32_rx_buffer[esp32_rx_length],
-                   &usart3_rx_buffer[esp32_rx_old_pos], length);
-            esp32_rx_length += length;
-        } else {
-            esp32_rx_overflow = 1U;
-        }
+        esp32_feed(&usart3_rx_buffer[esp32_rx_old_pos],
+                   (uint16_t)(curr_pos - esp32_rx_old_pos));
     } else {
-        /* Wrapped: [ DDD W ----- R DDD ] */
-        uint16_t length_to_end = USART3_RX_BUFFER_SIZE - esp32_rx_old_pos;
-
-        if ((esp32_rx_length + length_to_end + curr_pos) <= ESP32_RX_BUFFER_SIZE) {
-            if (length_to_end > 0U) {
-                memcpy(&esp32_rx_buffer[esp32_rx_length],
-                       &usart3_rx_buffer[esp32_rx_old_pos], length_to_end);
-                esp32_rx_length += length_to_end;
-            }
-            if (curr_pos > 0U) {
-                memcpy(&esp32_rx_buffer[esp32_rx_length],
-                       &usart3_rx_buffer[0], curr_pos);
-                esp32_rx_length += curr_pos;
-            }
-        } else {
-            esp32_rx_overflow = 1U;
-        }
+        /* Wrap: [ DDD W ----- R DDD ] */
+        esp32_feed(&usart3_rx_buffer[esp32_rx_old_pos],
+                   (uint16_t)(USART3_RX_BUFFER_SIZE - esp32_rx_old_pos));
+        esp32_feed(&usart3_rx_buffer[0], curr_pos);
     }
-
-    esp32_rx_old_pos = curr_pos;
+ 
+    /* HAL melaporkan Size == RxXferSize saat transfer-complete. Sebagai
+     * posisi tulis, nilai itu sama dengan 0. */
+    esp32_rx_old_pos = (curr_pos >= USART3_RX_BUFFER_SIZE) ? 0U : curr_pos;
 }

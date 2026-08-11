@@ -28,7 +28,7 @@ build-mertani-2.5:
 build-mertani-2.5_HAL:
 	@echo "--- Configuring and Building for Mertani 2.5 HAL Hardware ---"
 	cmake --preset mertani-2.5_HAL -DAPP=$(app)
-	cmake --build --preset build-mertani-2.5_HAL 
+	cmake --build --preset build-mertani-2.5_HAL -DAPP=$(app)
 	arm-none-eabi-size build/mertani-2.5_HAL/firmware.elf
 
 # Rule to configure and build for the Linux simulation
