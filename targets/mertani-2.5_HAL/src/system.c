@@ -3,6 +3,9 @@
 #include "battery.h"
 #include "watchdog.h"
 #include "rtc.h"
+#include "usart3.h"
+#include "rs485.h"
+#include "uart4.h"
 
 extern void led_init();
 
@@ -48,12 +51,21 @@ void System_Init(void)
     GPIO_InitTypeDef GPIO_InitStruct = {0};
     __HAL_RCC_GPIOC_CLK_ENABLE();
 
-    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6 | GPIO_PIN_7, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6 | GPIO_PIN_7, GPIO_PIN_RESET);
+
     GPIO_InitStruct.Pin   = GPIO_PIN_6 | GPIO_PIN_7;
     GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
     GPIO_InitStruct.Pull  = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+    /* 1. Load switch first. */
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_SET);
+    HAL_Delay(20);
+
+    /* 2. Only now may the mPCIe regulator be enabled. */
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_SET);
+    HAL_Delay(100);    
 
     lpuart1_init();
     led_init();
@@ -90,11 +102,11 @@ static void lpuart1_init(void)
 void HAL_UART_MspInit(UART_HandleTypeDef *huart)
 {
     GPIO_InitTypeDef GPIO_InitStruct = {0};
-
+ 
     if (huart->Instance == LPUART1) {
         __HAL_RCC_LPUART1_CLK_ENABLE();
         __HAL_RCC_GPIOC_CLK_ENABLE();
-
+ 
         /* PC1 = LPUART1_TX, PC0 = LPUART1_RX (AF8) - board-verified */
         GPIO_InitStruct.Pin       = GPIO_PIN_0 | GPIO_PIN_1;
         GPIO_InitStruct.Mode      = GPIO_MODE_AF_PP;
@@ -102,7 +114,15 @@ void HAL_UART_MspInit(UART_HandleTypeDef *huart)
         GPIO_InitStruct.Speed     = GPIO_SPEED_FREQ_HIGH;
         GPIO_InitStruct.Alternate = GPIO_AF8_LPUART1;
         HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+ 
+        return;
     }
+ 
+    /* Tanpa dua baris ini USART3 dan USART1 tidak pernah dikonfigurasi.
+     * Masing-masing fungsi sudah memeriksa Instance sendiri. */
+    USART3_MspInit(huart);      /* ESP32  - USART3, PC4/PC5, DMA1 Ch2 */
+    RS485_MspInit(huart);       /* RS485  - USART1  */ 
+    UART4_MspInit(huart);                 
 }
 
 void HAL_UART_MspDeInit(UART_HandleTypeDef *huart)
@@ -110,7 +130,27 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef *huart)
     if (huart->Instance == LPUART1) {
         __HAL_RCC_LPUART1_CLK_DISABLE();
         HAL_GPIO_DeInit(GPIOC, GPIO_PIN_0 | GPIO_PIN_1);
+ 
+        return;
     }
+ 
+    USART3_MspDeInit(huart);
+    RS485_MspDeInit(huart);
+    UART4_MspDeInit(huart);
+}
+
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
+{
+    USART3_RxEventCallback(huart, Size);
+    RS485_RxEventCallback(huart, Size);
+    UART4_RxEventCallback(huart, Size);
+}
+ 
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+    USART3_ErrorCallback(huart);
+    RS485_ErrorCallback(huart);
+    UART4_ErrorCallback(huart);
 }
 
 static void timer6_init(void)

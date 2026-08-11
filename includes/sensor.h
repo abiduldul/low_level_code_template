@@ -39,5 +39,6 @@ uint8_t Sensor_ReadAll();
 extern Sensor_t bgt_w87x;
 extern Sensor_t simba_aiw3648;
 extern Sensor_t batt_sensor;
+extern Sensor_t gps_sensor;
 
 #endif
