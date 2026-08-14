@@ -29,7 +29,7 @@ static uint8_t update_time() {
     if(NetworkManager_GetTimestamp(&timestamp_unix) == 1) {
         LOG_INFO("Time from the internet: %"PRIu32"", (uint32_t)timestamp_unix);
 
-        if(timestamp_unix <= 1782417727) {
+        if(timestamp_unix <= 1786579200) {
             LOG_ERROR("Time is not valid");
         } else {
             RTC_SetTimestamp(timestamp_unix);

@@ -10,12 +10,12 @@
 /* ------------------------------------------------------------------------- */
 /* Configuration                                                             */
 /* ------------------------------------------------------------------------- */
-
+#define GPS_FIX_MAX_AGE_SEC 10U
 #define GPS_LINE_MAX        96U     /* longest NMEA sentence we care about */
 #define GPS_LINE_SLOTS      4U      /* ring of line buffers                */
 #define GPS_QUEUE_DEPTH     8U
 #define NMEA_MAX_FIELDS     20U
-
+#define GPS_READ_TIMEOUT_TICKS  8000U
 #define GPS_FLAG_FIX        0x01U
 
 /* Send PMTK configuration on start-up.
@@ -54,6 +54,7 @@ static int32_t gps_lon_1e7;
 static void gps_thread_entry(ULONG);
 static void gps_uart_rx_cb(const uint8_t *data, uint16_t length);
 static void gps_parse_line(char *line);
+static void gps_publish(const GPS_Fix_t *fix);
 
 static void    gps_sensor_init(void);
 static uint8_t gps_sensor_read(void);
@@ -64,20 +65,28 @@ static void    gps_sensor_error_handler(void);
 /* Sensor framework wrapper                                                  */
 /* ------------------------------------------------------------------------- */
 
+static int32_t gps_lat_1e7;
+static int32_t gps_lon_1e7;
+static int32_t gps_alt_mm;
+static int32_t gps_sats;
+ 
 static SensorValue_t _values[] = {
     { .data_type = DATATYPE_INT32, .value = &gps_lat_1e7 },
-    { .data_type = DATATYPE_INT32, .value = &gps_lon_1e7 }
+    { .data_type = DATATYPE_INT32, .value = &gps_lon_1e7 },
+    { .data_type = DATATYPE_INT32, .value = &gps_alt_mm  },
+    { .data_type = DATATYPE_INT32, .value = &gps_sats    }
 };
-
+ 
 Sensor_t gps_sensor = {
     .id            = 0x1030,
     .init          = gps_sensor_init,
     .read          = gps_sensor_read,
     .config        = gps_sensor_config,
     .error_handler = gps_sensor_error_handler,
-    .nb_values     = 2,
+    .nb_values     = 4,
     .values        = _values
 };
+
 
 /* ------------------------------------------------------------------------- */
 /* NMEA helpers                                                              */
@@ -560,19 +569,35 @@ static void gps_sensor_init(void)
 static uint8_t gps_sensor_read(void)
 {
     GPS_Fix_t fix;
-
-    if (!GPS_GetLastFix(&fix) || !fix.fix_valid) {
-        gps_sensor.error_codes = 1U;
-
-        return 0U;
+ 
+    if (GPS_GetLastFix(&fix) && fix.fix_valid &&
+        (fix.age_seconds <= GPS_FIX_MAX_AGE_SEC)) {
+ 
+        gps_publish(&fix);
+        gps_sensor.error_codes = 0U;
+ 
+        return 1U;
+    }
+ 
+    if (GPS_WaitFix(&fix, GPS_READ_TIMEOUT_TICKS)) {
+        gps_publish(&fix);
+        gps_sensor.error_codes = 0U;
+ 
+        return 1U;
     }
 
-    gps_lat_1e7 = fix.latitude;
-    gps_lon_1e7 = fix.longitude;
+    gps_sats = 0;
+    gps_sensor.error_codes = 1U;
+ 
+    return 0U;
+}
 
-    gps_sensor.error_codes = 0U;
-
-    return 1U;
+static void gps_publish(const GPS_Fix_t *fix)
+{
+    gps_lat_1e7 = fix->latitude;
+    gps_lon_1e7 = fix->longitude;
+    gps_alt_mm  = fix->altitude_mm;
+    gps_sats    = (int32_t)fix->satellites;
 }
 
 static void gps_sensor_config(void)
